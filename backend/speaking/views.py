@@ -17,6 +17,7 @@ from speaking.services import (
     create_link,
     link_is_open,
     parse_review,
+    clean_session_video,
     parse_session,
     public_assessment,
     random_topic,
@@ -71,8 +72,9 @@ class SessionListCreate(APIView):
 
     def post(self, request):
         fields = parse_session(request.data)
+        video = clean_session_video(request.FILES.get("video"))
         with transaction.atomic():
-            session = SpeakingSession.objects.create(user=request.user, **fields)
+            session = SpeakingSession.objects.create(user=request.user, video=video, **fields)
             create_link(session, days=14)
         return Response(session_detail(get_owned(request.user, session.id)), status=201)
 

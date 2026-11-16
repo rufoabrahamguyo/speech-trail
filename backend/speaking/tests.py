@@ -1,5 +1,6 @@
 from datetime import timedelta
 
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.utils import timezone
 from rest_framework.test import APIClient, APITestCase
 
@@ -243,6 +244,42 @@ class SpeakTrackApiTests(APITestCase):
         self.assertEqual(len(progress.data["timeline"]), 2)
         detail = client.get(f"/api/sessions/{session['id']}/")
         self.assertEqual(detail.data["peer_average"], 4)
+
+    def test_session_video_is_shared_with_the_reviewer(self):
+        client, _ = self.register(email="video-speaker@example.com")
+        video = SimpleUploadedFile("talk.mp4", b"not-a-real-video", content_type="video/mp4")
+        response = client.post(
+            "/api/sessions/",
+            {
+                "topic": "A short recording of the opening",
+                "duration_minutes": 3,
+                "practiced_on": timezone.now().date().isoformat(),
+                "focus": "",
+                "notes": "",
+                "prompt_tag": "",
+                "video": video,
+            },
+            format="multipart",
+        )
+        self.assertEqual(response.status_code, 201, response.content)
+        self.assertTrue(response.data["video_url"].endswith(".mp4"))
+        token = response.data["links"][0]["token"]
+        guest = APIClient()
+        public = guest.get(f"/api/assess/{token}/")
+        self.assertEqual(public.status_code, 200)
+        self.assertEqual(public.data["video_url"], response.data["video_url"])
+
+        rejected = client.post(
+            "/api/sessions/",
+            {
+                "topic": "A short recording of the opening",
+                "duration_minutes": 3,
+                "practiced_on": timezone.now().date().isoformat(),
+                "video": SimpleUploadedFile("notes.txt", b"hello", content_type="text/plain"),
+            },
+            format="multipart",
+        )
+        self.assertEqual(rejected.status_code, 400)
 
     def test_random_topic_respects_a_known_tag(self):
         client, _ = self.register()

@@ -1,6 +1,7 @@
 import random
 import secrets
 from datetime import datetime, timedelta
+from pathlib import Path
 
 from django.db import IntegrityError, transaction
 from django.utils import timezone
@@ -210,6 +211,7 @@ def session_detail(session):
     return {
         **session_summary(session),
         "notes": session.notes,
+        "video_url": session.video.url if session.video else None,
         "links": [link_payload(link, session) for link in links],
         "evaluations": [evaluation_payload(evaluation) for evaluation in evaluations],
     }
@@ -229,6 +231,7 @@ def public_assessment(link, viewer_is_owner):
         "closed_reason": reason,
         "viewer_is_owner": viewer_is_owner,
         "session_id": as_id(session.id) if viewer_is_owner else None,
+        "video_url": session.video.url if session.video else None,
         "rubric": RUBRIC if is_open and not viewer_is_owner else [],
     }
 
@@ -273,6 +276,23 @@ def parse_session(data):
         "notes": notes,
         "prompt_tag": tag,
     }
+
+
+VIDEO_TYPES = {"video/mp4", "video/webm", "video/quicktime"}
+VIDEO_EXTENSIONS = {".mp4", ".webm", ".mov"}
+VIDEO_MAX_BYTES = 100 * 1024 * 1024
+
+
+def clean_session_video(upload):
+    if upload is None or getattr(upload, "size", 0) == 0:
+        return None
+    if upload.size > VIDEO_MAX_BYTES:
+        raise ValidationError({"video": "Keep the video under 100 MB."})
+    extension = Path(upload.name).suffix.lower()
+    content_type = (getattr(upload, "content_type", "") or "").split(";")[0].strip().lower()
+    if content_type not in VIDEO_TYPES and extension not in VIDEO_EXTENSIONS:
+        raise ValidationError({"video": "Upload an MP4, WebM, or MOV video."})
+    return upload
 
 
 def clean_evaluator_name(name):

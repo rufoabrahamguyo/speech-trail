@@ -1,5 +1,15 @@
+from pathlib import Path
+from uuid import uuid4
+
 from django.conf import settings
 from django.db import models
+
+
+def session_video_path(instance, filename):
+    extension = Path(filename).suffix.lower()
+    if extension not in {".mp4", ".webm", ".mov"}:
+        extension = ".mp4"
+    return f"session-videos/{uuid4().hex}{extension}"
 
 
 class SpeakingSession(models.Model):
@@ -10,6 +20,7 @@ class SpeakingSession(models.Model):
     practiced_on = models.DateField()
     focus = models.CharField(max_length=240, blank=True, default="")
     notes = models.TextField(blank=True, default="")
+    video = models.FileField(upload_to=session_video_path, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -17,6 +28,12 @@ class SpeakingSession(models.Model):
 
     def __str__(self):
         return self.topic
+
+    def delete(self, *args, **kwargs):
+        video = self.video
+        super().delete(*args, **kwargs)
+        if video:
+            video.delete(save=False)
 
 
 class AssessmentLink(models.Model):
